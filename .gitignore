@@ -1,0 +1,4 @@
+/private-data/
+.env
+receipt.pdf
+processed_records.json
