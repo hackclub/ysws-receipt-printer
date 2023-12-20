@@ -1,0 +1,82 @@
+<style>
+  @page {
+    /* Very important - The recipts won't print correctly without these exact dimensions */
+    size: 204pt 5668pt;
+    margin: 0;
+  }
+
+  html,
+  body {
+    font-family: Helvetica, sans-serif;
+    margin: 0;
+  }
+
+  h1 {
+    font-size: 16pt;
+    font-weight: normal;
+    margin: 0;
+  }
+
+  h2 {
+    font-size: 13pt;
+    margin: 0;
+  }
+
+  h3 {
+    font-size: 11pt;
+    text-decoration: underline;
+    margin: 0px;
+    padding: 0px;
+  }
+
+  p {
+    font-size: 11pt;
+    margin: 0;
+    margin-bottom: 1em;
+    line-height: 1.25;
+  }
+
+  .column {
+    float: left;
+    width: 33.33%;
+    text-align: center;
+  }
+
+  .column img {
+    margin-top: 2pt;
+  }
+
+  .row:after {
+    content: "";
+    display: table;
+    clear: both;
+  }
+</style>
+
+<img src="./assets/{{ grant.grant_type }}_logo.png" style="width: 100%;">
+<p>{{ grant.datetime | format_str_datetime }}</p>
+<img src="{{ grant.avatar_url }}" style="width: 35%;">
+<h1>{{ grant.name }}</h1>
+<p>
+  {{ grant.city }}, {{ grant.state }} – {{ grant.country }}<br>
+  Age {{ grant.age }}
+</p>
+
+{% for key, value in grant.q_a.items() %}
+<h3>{{ key }}</h3>
+<p>{{ value }}</p>
+{% endfor %}
+
+<div style="text-align: center;">
+  <h2>{{ grant.project_info.name }}</h2>
+  <img src="{{ grant.project_info.image_url }}" style="width: 85%;">
+</div>
+
+<div class="row">
+  {% for key, value in grant.project_info.qr_codes.items() %}
+  <div class="column">
+    <h3>{{ key }}</h3>
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={{ value }}" style="width: 90%;">
+  </div>
+  {% endfor %}
+</div>
