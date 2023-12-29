@@ -18,14 +18,13 @@ TABLE_NAME = os.getenv('SPRIG_TABLE_NAME')
 TIMEZONE = "America/New_York"
 JSON_DB_PATH = 'processed_records.json'
 POLL_INTERVAL = 30
-AIRTABLE_ENDPOINT = f'https://api.airtable.com/v0/{BASE_ID}/{TABLE_NAME}'
+AIRTABLE_ENDPOINT = f'https://api.airtable.com/v0/{BASE_ID}/{TABLE_NAME}?filterByFormula=NOT%28%7BHow%20did%20you%20hear%20about%20Sprig%3F%7D%20%3D%20%27%27%29&sort%5B0%5D%5Bfield%5D=Submitted+AT&sort%5B0%5D%5Bdirection%5D=desc'
 
 headers = {
     'Authorization': f'Bearer {API_KEY}'
 }
 
 def format_str_datetime(value):
-  print(value)
   tz = pytz.timezone(TIMEZONE)
   dt = datetime.fromisoformat(value)
   dt = dt.astimezone(tz)
@@ -137,8 +136,9 @@ def process_new_records():
 
   for record in data.get('records', []):
     record_id = record['id']
+
     if record_id not in processed_records.get(f'{BASE_ID}/{TABLE_NAME}', {}):
-      print("New Record Found! Printing")
+      print(f'New Record {record_id} Found! Printing')
       generate_pdf(prepare_record(record), "receipt.pdf")
       print_pdf("receipt.pdf")
 
