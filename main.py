@@ -2,10 +2,14 @@ import os
 from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
+from PIL import Image
+from io import BytesIO
 import subprocess
 from datetime import datetime
 import requests
 import time
+import base64
+import io
 import json
 import pytz
 import re
@@ -13,12 +17,18 @@ import re
 load_dotenv()
 
 API_KEY = os.getenv('AIRTABLE_API_KEY')
-BASE_ID = os.getenv('SPRIG_BASE_ID')
-TABLE_NAME = os.getenv('SPRIG_TABLE_NAME')
+
+SPRIG_BASE_ID = os.getenv('SPRIG_BASE_ID')
+SPRIG_TABLE_NAME = os.getenv('SPRIG_TABLE_NAME')
+SPRIG_AIRTABLE_ENDPOINT = f'https://api.airtable.com/v0/{SPRIG_BASE_ID}/{SPRIG_TABLE_NAME}?filterByFormula=NOT%28%7BHow%20did%20you%20hear%20about%20Sprig%3F%7D%20%3D%20%27%27%29&sort%5B0%5D%5Bfield%5D=Submitted+AT&sort%5B0%5D%5Bdirection%5D=desc'
+
+ONBOARD_BASE_ID = os.getenv('ONBOARD_BASE_ID')
+ONBOARD_TABLE_NAME = os.getenv('ONBOARD_TABLE_NAME')
+ONBOARD_AIRTABLE_ENDPOINT = f'https://api.airtable.com/v0/{ONBOARD_BASE_ID}/{ONBOARD_TABLE_NAME}?&sort%5B0%5D%5Bfield%5D=Created&sort%5B0%5D%5Bdirection%5D=desc'
+
 TIMEZONE = "America/New_York"
 JSON_DB_PATH = 'processed_records.json'
 POLL_INTERVAL = 30
-AIRTABLE_ENDPOINT = f'https://api.airtable.com/v0/{BASE_ID}/{TABLE_NAME}?filterByFormula=NOT%28%7BHow%20did%20you%20hear%20about%20Sprig%3F%7D%20%3D%20%27%27%29&sort%5B0%5D%5Bfield%5D=Submitted+AT&sort%5B0%5D%5Bdirection%5D=desc'
 
 headers = {
     'Authorization': f'Bearer {API_KEY}'
@@ -87,7 +97,29 @@ def extract_sprig_game_name(pr_files):
       return game_name
   return None
 
-def prepare_record(record):
+def save_sprig_game_thumbnail(game_name):
+  output_filename = 'sprig_game_thumbnail.png'
+  url = f"https://sprig.hackclub.com/api/thumbnail?key={game_name}"
+  response = requests.get(url)
+  response_json = response.json()
+
+  if response_json['kind'] == 'png':
+    # If the data is a PNG, decode and save directly
+    image_data = base64.b64decode(response_json['data'])
+    image = Image.open(io.BytesIO(image_data))
+    image.save(output_filename, 'PNG')
+  else:
+    # If the data is raw, process and save
+    decoded_string = base64.b64decode(response_json['data'])
+    image_data = bytearray(decoded_string)
+
+    # Create an image from the raw data
+    image = Image.frombytes('RGBA', (response_json['width'], response_json['height']), bytes(image_data))
+    image.save(output_filename, 'PNG')
+
+  return output_filename
+
+def prepare_sprig_record(record):
   fields = record.get('fields', {})
 
   pr_url = fields.get("Pull Request", "")
@@ -97,7 +129,7 @@ def prepare_record(record):
 
   project_info = {
     "name": game_name,
-    "image_url": f"https://github.com/hackclub/sprig/blob/main/games/img/{game_name}.png?raw=true",
+    "image_url": save_sprig_game_thumbnail(game_name),
     "qr_codes": {
       "Play Game": f"https://sprig.hackclub.com/gallery/{game_name}",
       "Pull Request": pr_url,
@@ -130,21 +162,63 @@ def prepare_record(record):
   return formatted_record
 
 def process_new_records():
+  # Sprig
   processed_records = load_processed_records()
-  response = requests.get(AIRTABLE_ENDPOINT, headers=headers)
+  response = requests.get(SPRIG_AIRTABLE_ENDPOINT, headers=headers)
   data = response.json()
 
   for record in data.get('records', []):
     record_id = record['id']
 
-    if record_id not in processed_records.get(f'{BASE_ID}/{TABLE_NAME}', {}):
+    if record_id not in processed_records.get(f'{SPRIG_BASE_ID}/{SPRIG_TABLE_NAME}', {}):
       print(f'New Record {record_id} Found! Printing')
-      generate_pdf(prepare_record(record), "receipt.pdf")
+      generate_pdf(prepare_sprig_record(record), "receipt.pdf")
       print_pdf("receipt.pdf")
 
-      processed_records.setdefault(f'{BASE_ID}/{TABLE_NAME}', {})[record_id] = True
+      processed_records.setdefault(f'{SPRIG_BASE_ID}/{SPRIG_TABLE_NAME}', {})[record_id] = True
 
-  save_processed_records(processed_records)
+      save_processed_records(processed_records)
+
+  # OnBoard
+
+  processed_records = load_processed_records()
+  response = requests.get(ONBOARD_AIRTABLE_ENDPOINT, headers=headers)
+  data = response.json()
+
+  for record in data.get('records', []):
+    record_id = record['id']
+
+    if record_id not in processed_records.get(f'{ONBOARD_BASE_ID}/{ONBOARD_TABLE_NAME}', {}):
+      generate_pdf({
+        "grant_type": "onboard",
+        "datetime": record['createdTime'],
+        "name": record['fields']['Full Name'],
+        "avatar_url": f"https://github.com/{record['fields']['GitHub handle']}.png",
+        "city": record['fields']['City (shipping address)'],
+        "state": record['fields']['State'],
+        "country": record['fields']['Country'],
+        "age": str(datetime.now().year - datetime.strptime(record['fields']['Birthdate'], '%Y-%m-%d').year),
+        "q_a": {
+          "How did you hear about OnBoard?": record['fields']['How did you hear about OnBoard?'],
+          "What are we doing well?": record['fields']['What we are doing well?'],
+          "How can we improve?": record['fields']['How can we improve?'],
+          "Is this the first PCB you've made?": record['fields']["Is this the first PCB you've made?"],
+        },
+        "project_info": {
+          "name": "",  # Assuming the project name is not available in 'record'
+          "image_url": "",
+          "qr_codes": {
+            "Email": f"mailto:{record['fields']['Email']}"
+          },
+        }
+      }, "receipt.pdf")
+
+      print_pdf("receipt.pdf")
+
+      processed_records.setdefault(f'{ONBOARD_BASE_ID}/{ONBOARD_TABLE_NAME}', {})[record_id] = True
+
+      save_processed_records(processed_records)
+
 
 if __name__ == "__main__":
    while True:
