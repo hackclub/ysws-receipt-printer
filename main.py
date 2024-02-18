@@ -13,6 +13,10 @@ import io
 import json
 import pytz
 import re
+import markdown
+import tempfile
+import zipfile
+import shutil
 
 load_dotenv()
 
@@ -52,7 +56,8 @@ def generate_pdf(data, filename="receipt.pdf"):
 def print_pdf(filename):
   printer_name = os.environ.get('DEST_RECEIPT_PRINTER')
 
-  subprocess.run(["lp", "-d", printer_name, filename])
+  subprocess.run(["open", filename])
+  #subprocess.run(["lp", "-d", printer_name, filename])
 
 def load_processed_records():
   try:
@@ -64,6 +69,35 @@ def load_processed_records():
 def save_processed_records(records):
   with open(JSON_DB_PATH, 'w') as file:
     json.dump(records, file)
+
+# repo: 'hackclub/onboard
+# username 'zachlatta'
+def get_first_matching_pr_for_user(repo, username):
+  query = f"repo:{repo} is:pr is:merged author:{username}"
+  
+  url = "https://api.github.com/search/issues"
+  headers = {
+    "Accept": "application/vnd.github.v3+json",
+  }
+  
+  params = {
+    "q": query,
+    "order": "desc",
+    "per_page": 1  # Limit to the first result
+  }
+  
+  response = requests.get(url, headers=headers, params=params)
+  
+  if response.status_code == 200:
+    data = response.json()
+    if data["items"]:
+      first_pr = data["items"][0]
+
+      return first_pr
+    else:
+      return None
+  else:
+    raise Exception(f"GitHub API error: {response.status_code}")
 
 def get_pull_request_files(pr_url):
   # Extract owner, repo, and pull request number from the URL
@@ -84,6 +118,31 @@ def get_pull_request_files(pr_url):
   # Extract the file names from the response
   file_names = [file_info['filename'] for file_info in response.json()]
   return file_names
+
+def get_gh_file_contents(owner, repo, file_path):
+  try:
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}"
+
+    response = requests.get(api_url)
+
+    if response.status_code == 200:
+      data = response.json()
+
+
+      if data.get("encoding") == "base64":
+        import base64
+        content = base64.b64decode(data["content"])
+
+        try:
+          return content.decode("utf-8")
+        except UnicodeDecodeError:
+          return content # return raw bytes if it can't decide into a string (ex. if it's a zip file)
+      else:
+        raise Exception("File content not in base64 encoding.")
+    else:
+      raise Exception(f"GitHub API error: {response.status_code}")
+  except Exception as e:
+    raise ValueError(f"Error processing GitHub file: {e}")
 
 # converts ['games/DoNotConsumeEmptyBowls.js', 'games/img/Do Not Consume Empty Bowls (1).png', 'games/img/DoNotConsumeEmptyBowls.png']
 # into "DoNotConsumeEmptyBowls"
@@ -161,6 +220,35 @@ def prepare_sprig_record(record):
 
   return formatted_record
 
+def preprocess_onboard_project_description_markdown(md_content):
+  # remove frontmatter
+  md_content = re.sub(r'^---.*?---\s*', '', md_content, flags=re.DOTALL)
+
+  # remote first top-level heading if it exists
+  md_content = re.sub(r'(?:\n|^)# .+?\n', '', md_content, count=1, flags=re.MULTILINE)
+
+  # Replace all headings (#, ##, ###, ####, #####) with ###
+  md_content = re.sub(r'^#+', '###', md_content, flags=re.MULTILINE)
+
+  return md_content
+
+def render_pcb_svgs(owner, repo, gerber_zip_file_path):
+  zip_bytes = get_gh_file_contents(owner, repo, gerber_zip_file_path)
+
+  with tempfile.TemporaryDirectory() as temp_dir:
+    with BytesIO(zip_bytes) as zip_bio:
+      with zipfile.ZipFile(zip_bio) as zip_file:
+        zip_file.extractall(path=temp_dir)
+        extracted_filenames = zip_file.namelist()
+        gbr_filenames = [file for file in extracted_filenames if file.lower().endswith('.gbr')]
+
+        # render gerber files to svg files - top.svg and bottom.svg
+        subprocess.run(['tracespace', '-b.color.sm="rgba(128,00,00,0.75)"', *gbr_filenames], cwd=temp_dir)
+
+        shutil.copyfile(f"{temp_dir}/top.svg", "onboard_board_preview.svg")
+      
+  return "onboard_board_preview.svg"
+
 def process_new_records():
   # Sprig
   processed_records = load_processed_records()
@@ -180,7 +268,6 @@ def process_new_records():
       save_processed_records(processed_records)
 
   # OnBoard
-
   processed_records = load_processed_records()
   response = requests.get(ONBOARD_AIRTABLE_ENDPOINT, headers=headers)
   data = response.json()
@@ -189,7 +276,9 @@ def process_new_records():
     record_id = record['id']
 
     if record_id not in processed_records.get(f'{ONBOARD_BASE_ID}/{ONBOARD_TABLE_NAME}', {}):
-      generate_pdf({
+      matching_pr = get_first_matching_pr_for_user('hackclub/onboard', record['fields']['GitHub handle'])
+
+      pdf_info = {
         "grant_type": "onboard",
         "datetime": record['createdTime'],
         "name": record['fields']['Full Name'],
@@ -211,7 +300,28 @@ def process_new_records():
             "Email": f"mailto:{record['fields']['Email']}"
           },
         }
-      }, "receipt.pdf")
+      }
+
+      if matching_pr:
+        pr_files = get_pull_request_files(matching_pr['html_url'])
+
+        pdf_info['project_info']['name'] = matching_pr['title']
+        pdf_info['project_info']['qr_codes']['Pull Request'] = matching_pr['html_url']
+
+        readme_files = [ file for file in pr_files if file.lower().endswith('readme.md')]
+
+        if len(readme_files) > 0:
+          readme_contents = get_gh_file_contents('hackclub', 'onboard', readme_files[0])
+          processed_contents = preprocess_onboard_project_description_markdown(readme_contents)
+          html = markdown.markdown(processed_contents)
+          pdf_info['project_info']['html_description'] = html
+        
+        gerber_files = [ file for file in pr_files if file.lower().endswith('.zip')]
+
+        if len(gerber_files) > 0:
+          pdf_info['project_info']['image_url'] = render_pcb_svgs('hackclub', 'onboard', gerber_files[0])
+
+      generate_pdf(pdf_info, "receipt.pdf")
 
       print_pdf("receipt.pdf")
 

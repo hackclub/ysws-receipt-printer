@@ -69,6 +69,9 @@
 
 <div style="text-align: center;">
   <h2>{{ grant.project_info.name }}</h2>
+  <div style="text-align: left;">
+  {{ grant.project_info.html_description|safe }}
+  </div>
   <img src="{{ grant.project_info.image_url }}" style="width: 85%;">
 </div>
 
