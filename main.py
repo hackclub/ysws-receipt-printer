@@ -56,8 +56,7 @@ def generate_pdf(data, filename="receipt.pdf"):
 def print_pdf(filename):
   printer_name = os.environ.get('DEST_RECEIPT_PRINTER')
 
-  subprocess.run(["open", filename])
-  #subprocess.run(["lp", "-d", printer_name, filename])
+  subprocess.run(["lp", "-d", printer_name, filename])
 
 def load_processed_records():
   try:
@@ -240,7 +239,11 @@ def render_pcb_svgs(owner, repo, gerber_zip_file_path):
       with zipfile.ZipFile(zip_bio) as zip_file:
         zip_file.extractall(path=temp_dir)
         extracted_filenames = zip_file.namelist()
-        gbr_filenames = [file for file in extracted_filenames if file.lower().endswith('.gbr')]
+        filename_extensions = [
+          '.gbl', '.gbo', '.gbs', '.gtl', '.gto', '.gtp', '.gts', '.gbl',
+          '.gbo', '.gbs', '.gko', '.gml', '.gpb', '.gpt', '.gts', '.gbr', '.drl'
+        ]
+        gbr_filenames = [file for file in extracted_filenames if file.lower().endswith(tuple(filename_extensions))]
 
         # render gerber files to svg files - top.svg and bottom.svg
         subprocess.run(['tracespace', '-b.color.sm="rgba(128,00,00,0.75)"', *gbr_filenames], cwd=temp_dir)
