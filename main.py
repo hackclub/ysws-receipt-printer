@@ -243,7 +243,7 @@ def render_pcb_svgs(owner, repo, gerber_zip_file_path):
           '.gbl', '.gbo', '.gbs', '.gtl', '.gto', '.gtp', '.gts', '.gbl',
           '.gbo', '.gbs', '.gko', '.gml', '.gpb', '.gpt', '.gts', '.gbr', '.drl'
         ]
-        gbr_filenames = [file for file in extracted_filenames if file.lower().endswith(tuple(filename_extensions))]
+        gbr_filenames = [file for file in extracted_filenames if file.lower().endswith(tuple(filename_extensions)) and not file.split('/')[-1].startswith('.')]
 
         # render gerber files to svg files - top.svg and bottom.svg
         subprocess.run(['tracespace', '-b.color.sm="rgba(128,00,00,0.75)"', *gbr_filenames], cwd=temp_dir)
