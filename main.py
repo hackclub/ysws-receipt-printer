@@ -28,7 +28,7 @@ SPRIG_AIRTABLE_ENDPOINT = f'https://api.airtable.com/v0/{SPRIG_BASE_ID}/{SPRIG_T
 
 ONBOARD_BASE_ID = os.getenv('ONBOARD_BASE_ID')
 ONBOARD_TABLE_NAME = os.getenv('ONBOARD_TABLE_NAME')
-ONBOARD_AIRTABLE_ENDPOINT = f'https://api.airtable.com/v0/{ONBOARD_BASE_ID}/{ONBOARD_TABLE_NAME}?&sort%5B0%5D%5Bfield%5D=Created&sort%5B0%5D%5Bdirection%5D=desc'
+ONBOARD_AIRTABLE_ENDPOINT = f'https://api.airtable.com/v0/{ONBOARD_BASE_ID}/{ONBOARD_TABLE_NAME}' + "?&filterByFormula=AND({Status} = 'Approved', NOT({What we are doing well?} = ''))&sort[0][field]=Created&sort[0][direction]=desc"
 
 TIMEZONE = "America/New_York"
 JSON_DB_PATH = 'processed_records.json'
@@ -73,7 +73,7 @@ def save_processed_records(records):
 # username 'zachlatta'
 def get_first_matching_pr_for_user(repo, username):
   query = f"repo:{repo} is:pr is:merged author:{username}"
-  
+
   url = "https://api.github.com/search/issues"
   headers = {
     "Accept": "application/vnd.github.v3+json",
@@ -279,7 +279,11 @@ def process_new_records():
     record_id = record['id']
 
     if record_id not in processed_records.get(f'{ONBOARD_BASE_ID}/{ONBOARD_TABLE_NAME}', {}):
-      matching_pr = get_first_matching_pr_for_user('hackclub/onboard', record['fields']['GitHub handle'])
+      try:
+        matching_pr = get_first_matching_pr_for_user('hackclub/onboard', record['fields']['GitHub handle'])
+      except Exception as e:
+        print("Failed on", f"https://airtable.com/{ONBOARD_BASE_ID}/{ONBOARD_TABLE_NAME}/{record_id}?blocks=hide", "with:", e)
+        continue
 
       pdf_info = {
         "grant_type": "onboard",
