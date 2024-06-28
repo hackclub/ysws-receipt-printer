@@ -1,344 +1,221 @@
-import os
-from dotenv import load_dotenv
-from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML
-from PIL import Image
-from io import BytesIO
-import subprocess
-from datetime import datetime
-import requests
-import time
+print("Loading...")
+
+import argparse
 import base64
+import datetime
 import io
-import json
-import pytz
-import re
+import time
+from pyairtable import Api
 import markdown
-import tempfile
-import zipfile
-import shutil
+from dotenv import load_dotenv
+import os
+from typing import Dict, List
+from weasyprint import HTML, CSS
+from weasyprint.text.fonts import FontConfiguration
+from os import system
+import qrcode
+
+
+parser = argparse.ArgumentParser(
+                    prog='Unified YSWS Printing Bot',
+                    description='This program automatically checks the Unified YSWS database for new records. It can also print a specified number of records or those dated before, after, or between specified dates upon request.',
+                    epilog='Made with love by Micha Albert.')
+parser.add_argument('-c', '--count', help="The number of most recent records to print. If provided, this script will print this number of records and then exit.")
+parser.add_argument('-a', '--after', help="The date in format YYYY-MM-DD at which to start printing records in chronological order. Can be combined with -b/--before to print all records between two dates.")
+parser.add_argument('-b', '--before', help="The date in format YYYY-MM-DD at which to start printing records in REVERSE chronological order. Best used with -a/--after.")
+parser.add_argument('-n', '--no_print', help="Do not print out generated documents. Used for debugging.", action="store_true")
+parser.add_argument('-v', '--verbose', help="Verbode mode. Used for debugging.", action="store_true")
+args = parser.parse_args()
+
+if not args.count and not args.after and not args.before:
+    print("Please specify at least one of -c/--count, -b/--before, or -a/--after. Exiting now.")
+    exit()
+
+PRINTING = not args.no_print
+VERBOSE = args.verbose
+
+if VERBOSE:
+    print("Modules imported!")
+    print("Setting up AirTable API...")
 
 load_dotenv()
 
-API_KEY = os.getenv('AIRTABLE_API_KEY')
+BASE = os.getenv("BASE")
+TABLE = os.getenv("TABLE")
+VIEW = os.getenv("VIEW")
 
-SPRIG_BASE_ID = os.getenv('SPRIG_BASE_ID')
-SPRIG_TABLE_NAME = os.getenv('SPRIG_TABLE_NAME')
-SPRIG_AIRTABLE_ENDPOINT = f'https://api.airtable.com/v0/{SPRIG_BASE_ID}/{SPRIG_TABLE_NAME}?filterByFormula=NOT%28%7BHow%20did%20you%20hear%20about%20Sprig%3F%7D%20%3D%20%27%27%29&sort%5B0%5D%5Bfield%5D=Submitted+AT&sort%5B0%5D%5Bdirection%5D=desc'
+airtable = Api(os.getenv("AIRTABLE_API_KEY"))
 
-ONBOARD_BASE_ID = os.getenv('ONBOARD_BASE_ID')
-ONBOARD_TABLE_NAME = os.getenv('ONBOARD_TABLE_NAME')
-ONBOARD_AIRTABLE_ENDPOINT = f'https://api.airtable.com/v0/{ONBOARD_BASE_ID}/{ONBOARD_TABLE_NAME}' + "?&filterByFormula=AND({Status} = 'Approved', NOT({What we are doing well?} = ''))&sort[0][field]=Created&sort[0][direction]=desc"
+if VERBOSE:
+    print("API set up!")
 
-TIMEZONE = "America/New_York"
-JSON_DB_PATH = 'processed_records.json'
-POLL_INTERVAL = 30
+def check_for_updates(entries):
+    updated_entries = airtable.base(BASE).table(TABLE).all(view=VIEW)
+    new_entries = []
+    if updated_entries != entries:
+        for entry in updated_entries:
+            if entry not in entries:
+                new_entries.append(entry)
+    return new_entries
 
-headers = {
-    'Authorization': f'Bearer {API_KEY}'
+
+def html_template(grant_info: Dict[str, str | List[str]]):
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <p style="text-align: center; font-size: 65px; font-weight: bold; margin: 0">{grant_info["type"]}</p>
+    <p style="margin: 0">{grant_info["created"]}</p>
+    <br/>
+    <img src="https://github.com/{grant_info["gh"]}.png" style="width: 35%; height: auto" />
+    <p style="margin: 0; font-size: 150%">{grant_info["name"]}</p>
+    <p style="margin: 0">{grant_info["location"]}</p>
+    {f"<p style=\"margin: 0\">Age {grant_info["age"]}</p>" if grant_info["age"] != "" else ""}
+    <br />
+    {f"<p style=\"text-decoration-line: underline;font-weight: bold; margin: 0\">How did you hear about {grant_info["type"]}?<br/><div style=\"text-decoration-line: none; font-weight: regular\">{grant_info["ref"]}</div></p>" if grant_info["ref"] != "" else ""}
+
+    {f"<p style=\"text-decoration-line: underline;font-weight: bold; margin: 0\">What are we doing well?<br/><div style=\"text-decoration-line: none; font-weight: regular\">{grant_info["good"]}</div></p>" if grant_info["good"] != "" else ""}
+
+    {f"<p style=\"text-decoration-line: underline;font-weight: bold; margin: 0\">How can we improve?<br/><div style=\"text-decoration-line: none; font-weight: regular\">{grant_info["bad"]}</div></p>" if grant_info["bad"] != "" else ""}
+
+    {f"<p style=\"text-decoration-line: underline;font-weight: bold; margin: 0\">Description<br/><div style=\"text-decoration-line: none; font-weight: regular\">{grant_info["description"]}</div></p>" if grant_info["description"] != "" else ""}
+
+    {"\n".join(grant_info["screenshots"])}
+    <div style="display: flex; justify-content: space-evenly; width: 100%; margin-top: 0">
+        <div>
+            {(f"""<p style="text-decoration-line: underline;font-weight: bold;text-align:center; margin-bottom: 0">Email</p>
+            <img src="{grant_info["email_qr"]}" style="width: 75pt; height: auto"/>""") if grant_info["email_qr"] != "" else ""}
+        </div>
+        <div>
+            {(f"""<p style="text-decoration-line: underline;font-weight: bold;text-align:center; margin-bottom: 0">Code URL</p>
+            <img src="{grant_info["code_qr"]}" style="width: 75pt; height: auto"/>""") if grant_info["code_qr"] != "" else ""}
+        </div>
+    </div>
+    <h6 style="text-align: center; margin-top: 0">This was printed at {grant_info["time"]}</h6>
+</body>
+</html>"""
+
+if VERBOSE:
+    print("Initalizing CSS renderer...")
+
+font_config = FontConfiguration()
+
+def pillow_image_to_base64_string(img):
+    buffered = io.BytesIO()
+    img.save(buffered, format="JPEG")
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+
+css = CSS(
+    string="""
+@page {
+    /* Very important - The recipts won't print correctly without these exact dimensions */
+    size: 204pt 5668pt;
+    margin: 0;
 }
 
-def format_str_datetime(value):
-  tz = pytz.timezone(TIMEZONE)
-  dt = datetime.fromisoformat(value)
-  dt = dt.astimezone(tz)
-  return dt.strftime("%m/%d/%Y – %I:%M%p")
+body {
+    font-family: 'Roboto', sans-serif;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0;
+}"""
+)
 
-def generate_pdf(data, filename="receipt.pdf"):
-  env = Environment(loader=FileSystemLoader('.'))
-  env.filters['format_str_datetime'] = format_str_datetime
-  template = env.get_template('receipt_template.jinja')
+if VERBOSE:
+    print("CSS renderer initalized!")
+    print("Fetching all entries...")
 
-  html_out = template.render(grant=data)
+entries = airtable.base(BASE).table(TABLE).all(view=VIEW)
 
-  HTML(string=html_out, base_url=".").write_pdf(filename)
-
-def print_pdf(filename):
-  printer_name = os.environ.get('DEST_RECEIPT_PRINTER')
-
-  subprocess.run(["lp", "-d", printer_name, filename])
-
-def load_processed_records():
-  try:
-    with open(JSON_DB_PATH, 'r') as file:
-      return json.load(file)
-  except FileNotFoundError:
-    return {}
-
-def save_processed_records(records):
-  with open(JSON_DB_PATH, 'w') as file:
-    json.dump(records, file)
-
-# repo: 'hackclub/onboard
-# username 'zachlatta'
-def get_first_matching_pr_for_user(repo, username):
-  query = f"repo:{repo} is:pr is:merged author:{username}"
-
-  url = "https://api.github.com/search/issues"
-  headers = {
-    "Accept": "application/vnd.github.v3+json",
-  }
-  
-  params = {
-    "q": query,
-    "order": "desc",
-    "per_page": 1  # Limit to the first result
-  }
-  
-  response = requests.get(url, headers=headers, params=params)
-  
-  if response.status_code == 200:
-    data = response.json()
-    if data["items"]:
-      first_pr = data["items"][0]
-
-      return first_pr
-    else:
-      return None
-  else:
-    raise Exception(f"GitHub API error: {response.status_code}")
-
-def get_pull_request_files(pr_url):
-  # Extract owner, repo, and pull request number from the URL
-  match = re.search(r'github\.com/([^/]+)/([^/]+)/pull/(\d+)', pr_url)
-  if not match:
-    raise ValueError("Invalid GitHub pull request URL")
-
-  owner, repo, pull_number = match.groups()
-
-  # GitHub API endpoint to get files of a pull request
-  api_url = f'https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}/files'
-
-  # Make a GET request to the GitHub API
-  response = requests.get(api_url)
-  if response.status_code != 200:
-    raise Exception(f"GitHub API responded with status code {response.status_code}")
-
-  # Extract the file names from the response
-  file_names = [file_info['filename'] for file_info in response.json()]
-  return file_names
-
-def get_gh_file_contents(owner, repo, file_path):
-  try:
-    api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}"
-
-    response = requests.get(api_url)
-
-    if response.status_code == 200:
-      data = response.json()
+if VERBOSE:
+    print("All entries fetched!")
 
 
-      if data.get("encoding") == "base64":
-        import base64
-        content = base64.b64decode(data["content"])
+def get_before(entries, date: str):
+    before_entries = []
+    for entry in entries:
+        if entry["fields"]["Approved At"] == date:
+            before_entries.append(entry)
+    return before_entries
 
-        try:
-          return content.decode("utf-8")
-        except UnicodeDecodeError:
-          return content # return raw bytes if it can't decide into a string (ex. if it's a zip file)
-      else:
-        raise Exception("File content not in base64 encoding.")
-    else:
-      raise Exception(f"GitHub API error: {response.status_code}")
-  except Exception as e:
-    raise ValueError(f"Error processing GitHub file: {e}")
+def get_after(entries, date: str):
+    after_entries = []
+    for entry in entries:
+        if entry["fields"]["Approved At"] == date:
+            after_entries.append(entry)
+    return after_entries
 
-# converts ['games/DoNotConsumeEmptyBowls.js', 'games/img/Do Not Consume Empty Bowls (1).png', 'games/img/DoNotConsumeEmptyBowls.png']
-# into "DoNotConsumeEmptyBowls"
-def extract_sprig_game_name(pr_files):
-  for path in pr_files:
-    if path.startswith('games/') and path.endswith('.js'):
-      # Split the path and get the last part (file name with extension)
-      file_name_with_extension = path.split('/')[-1]
-      # Remove the .js extension to get the game name
-      game_name = file_name_with_extension[:-3]
-      return game_name
-  return None
 
-def save_sprig_game_thumbnail(game_name):
-  output_filename = 'sprig_game_thumbnail.png'
-  url = f"https://sprig.hackclub.com/api/thumbnail?key={game_name}"
-  response = requests.get(url)
-  response_json = response.json()
 
-  if response_json['kind'] == 'png':
-    # If the data is a PNG, decode and save directly
-    image_data = base64.b64decode(response_json['data'])
-    image = Image.open(io.BytesIO(image_data))
-    image.save(output_filename, 'PNG')
-  else:
-    # If the data is raw, process and save
-    decoded_string = base64.b64decode(response_json['data'])
-    image_data = bytearray(decoded_string)
 
-    # Create an image from the raw data
-    image = Image.frombytes('RGBA', (response_json['width'], response_json['height']), bytes(image_data))
-    image.save(output_filename, 'PNG')
+def print_entry(entry):
+    description = ""  
+    if "Description" in entry["fields"]:
+        if VERBOSE:print("Has description")
+        description = entry["fields"]["Description"]
+    screenshots = []
+    if "Screenshot" in entry["fields"]:
+        if VERBOSE:print("Has screenshot")
+        for screenshot in entry["fields"]["Screenshot"]:
+            screenshots.append(f"<img src=\"{screenshot["url"]}\" style=\"width: 75%; height: auto; display: block; margin-left: auto; margin-right: auto\"/>")
+    html = HTML(
+        string=html_template(
+            {
+                "type": entry["fields"]["ID"].split("–")[0],
+                "gh": entry["fields"]["GitHub Username"] if "GitHub Username" in entry["fields"] else "",
+                "name": " ".join(entry["fields"]["ID"].split("–")[1:]),
+                "age": entry["fields"]["Age When Approved"] if "Age When Approved" in entry["fields"] else "",
+                "time": time.strftime("%A %b. %-d, %Y"),
+                "location": f"{entry["fields"]["City"]}, {entry["fields"]["State / Province"]} - {entry["fields"]["Country"]}",
+                "ref": entry["fields"]["How did you hear about this?"] if "How did you hear about this?" in entry["fields"] else "",
+                "good": entry["fields"]["What are we doing well?"] if "What are we doing well?" in entry["fields"] else "",
+                "bad": entry["fields"]["How can we improve?"] if "How can we improve?" in entry["fields"] else "",
+                "description": description,
+                "screenshots": screenshots,
+                "email_qr": ('data:image/jpeg;base64,' + pillow_image_to_base64_string(qrcode.make(entry["fields"]["Email"]))) if "Email" in entry["fields"] else "",
+                "code_qr": ('data:image/jpeg;base64,' + pillow_image_to_base64_string(qrcode.make(entry["fields"]["Code URL"]))) if "Code URL" in entry["fields"] else "",
+                "created": datetime.datetime.fromisoformat(str(entry["fields"]["Created"])).strftime("%m/%d/%Y – %I:%M%p")
 
-  return output_filename
+            }
+        )
+    )
+    html.write_pdf("out.pdf", stylesheets=[css])
+    if PRINTING:
+        system("lp out.pdf")
 
-def prepare_sprig_record(record):
-  fields = record.get('fields', {})
+def print_qty(qty: int):
+    for entry in entries[:qty]:
+        print_entry(entry)
 
-  pr_url = fields.get("Pull Request", "")
-  pr_files = get_pull_request_files(pr_url)
+def poll():
+    while True:
+        print("Polling Airtable...")
+        updated_entries = check_for_updates(entries)
+        if len(updated_entries) > 0:
+            print("Found at least one new entry!")
+        entries = airtable.base(BASE).table(TABLE).all(view=VIEW)
+        for entry in updated_entries:
+            print_entry(entry)
+        time.sleep(7)
 
-  game_name = extract_sprig_game_name(pr_files)
-
-  project_info = {
-    "name": game_name,
-    "image_url": save_sprig_game_thumbnail(game_name),
-    "qr_codes": {
-      "Play Game": f"https://sprig.hackclub.com/gallery/{game_name}",
-      "Pull Request": pr_url,
-      "Email": f"mailto:{fields.get('Email', '')}"
-    }
-  }
-
-  gh = fields.get("GitHub Username")
-  tz = pytz.timezone(TIMEZONE)
-
-  formatted_record = {
-    "grant_type": "sprig",
-    "datetime": record.get("createdTime", ""),
-    "name": fields.get("Name", ""),
-    "avatar_url": f"https://github.com/{gh}.png",  # Replace with actual field name for avatar URL
-    "city": fields.get("City", ""),
-    "state": fields.get("State or Province", ""),
-    "country": fields.get("Country", ""),
-    "age": fields.get("Age (years)", ""),
-    "q_a": {
-      "How did you hear about Sprig?": fields.get("How did you hear about Sprig?", ""),
-      "Is this the first video game you’ve made?": fields.get("Is this the first video game you've made?", ""),
-      "What are we doing well?": fields.get("What are we doing well?", ""),
-      "How can we improve?": fields.get("How can we improve?", ""),
-      "Are you in a club?": fields.get("In a club?", "")
-    },
-    "project_info": project_info
-  }
-
-  return formatted_record
-
-def preprocess_onboard_project_description_markdown(md_content):
-  # remove frontmatter
-  md_content = re.sub(r'^---.*?---\s*', '', md_content, flags=re.DOTALL)
-
-  # remote first top-level heading if it exists
-  md_content = re.sub(r'(?:\n|^)# .+?\n', '', md_content, count=1, flags=re.MULTILINE)
-
-  # Replace all headings (#, ##, ###, ####, #####) with ###
-  md_content = re.sub(r'^#+', '###', md_content, flags=re.MULTILINE)
-
-  return md_content
-
-def render_pcb_svgs(owner, repo, gerber_zip_file_path):
-  zip_bytes = get_gh_file_contents(owner, repo, gerber_zip_file_path)
-
-  with tempfile.TemporaryDirectory() as temp_dir:
-    with BytesIO(zip_bytes) as zip_bio:
-      with zipfile.ZipFile(zip_bio) as zip_file:
-        zip_file.extractall(path=temp_dir)
-        extracted_filenames = zip_file.namelist()
-        filename_extensions = [
-          '.gbl', '.gbo', '.gbs', '.gtl', '.gto', '.gtp', '.gts', '.gbl',
-          '.gbo', '.gbs', '.gko', '.gml', '.gpb', '.gpt', '.gts', '.gbr', '.drl'
-        ]
-        gbr_filenames = [file for file in extracted_filenames if file.lower().endswith(tuple(filename_extensions)) and not file.split('/')[-1].startswith('.')]
-
-        # render gerber files to svg files - top.svg and bottom.svg
-        subprocess.run(['tracespace', '-b.color.sm="rgba(128,00,00,0.75)"', *gbr_filenames], cwd=temp_dir)
-
-        shutil.copyfile(f"{temp_dir}/top.svg", "onboard_board_preview.svg")
-      
-  return "onboard_board_preview.svg"
-
-def process_new_records():
-  # Sprig
-  processed_records = load_processed_records()
-  response = requests.get(SPRIG_AIRTABLE_ENDPOINT, headers=headers)
-  data = response.json()
-
-  for record in data.get('records', []):
-    record_id = record['id']
-
-    if record_id not in processed_records.get(f'{SPRIG_BASE_ID}/{SPRIG_TABLE_NAME}', {}):
-      print(f'New Record {record_id} Found! Printing')
-      generate_pdf(prepare_sprig_record(record), "receipt.pdf")
-      print_pdf("receipt.pdf")
-
-      processed_records.setdefault(f'{SPRIG_BASE_ID}/{SPRIG_TABLE_NAME}', {})[record_id] = True
-
-      save_processed_records(processed_records)
-
-  # OnBoard
-  processed_records = load_processed_records()
-  response = requests.get(ONBOARD_AIRTABLE_ENDPOINT, headers=headers)
-  data = response.json()
-
-  for record in data.get('records', []):
-    record_id = record['id']
-
-    if record_id not in processed_records.get(f'{ONBOARD_BASE_ID}/{ONBOARD_TABLE_NAME}', {}):
-      try:
-        matching_pr = get_first_matching_pr_for_user('hackclub/onboard', record['fields']['GitHub handle'])
-      except Exception as e:
-        print("Failed on", f"https://airtable.com/{ONBOARD_BASE_ID}/{ONBOARD_TABLE_NAME}/{record_id}?blocks=hide", "with:", e)
-        continue
-
-      pdf_info = {
-        "grant_type": "onboard",
-        "datetime": record['createdTime'],
-        "name": record['fields']['Full Name'],
-        "avatar_url": f"https://github.com/{record['fields']['GitHub handle']}.png",
-        "city": record['fields']['City (shipping address)'],
-        "state": record['fields']['State'],
-        "country": record['fields']['Country'],
-        "age": str(datetime.now().year - datetime.strptime(record['fields']['Birthdate'], '%Y-%m-%d').year),
-        "q_a": {
-          "How did you hear about OnBoard?": record['fields']['How did you hear about OnBoard?'],
-          "What are we doing well?": record['fields']['What we are doing well?'],
-          "How can we improve?": record['fields']['How can we improve?'],
-          "Is this the first PCB you've made?": record['fields']["Is this the first PCB you've made?"],
-        },
-        "project_info": {
-          "name": "",  # Assuming the project name is not available in 'record'
-          "image_url": "",
-          "qr_codes": {
-            "Email": f"mailto:{record['fields']['Email']}"
-          },
-        }
-      }
-
-      if matching_pr:
-        pr_files = get_pull_request_files(matching_pr['html_url'])
-
-        pdf_info['project_info']['name'] = matching_pr['title']
-        pdf_info['project_info']['qr_codes']['Pull Request'] = matching_pr['html_url']
-
-        readme_files = [ file for file in pr_files if file.lower().endswith('readme.md')]
-
-        if len(readme_files) > 0:
-          readme_contents = get_gh_file_contents('hackclub', 'onboard', readme_files[0])
-          processed_contents = preprocess_onboard_project_description_markdown(readme_contents)
-          html = markdown.markdown(processed_contents)
-          pdf_info['project_info']['html_description'] = html
-        
-        gerber_files = [ file for file in pr_files if file.lower().endswith('.zip')]
-
-        if len(gerber_files) > 0:
-          pdf_info['project_info']['image_url'] = render_pcb_svgs('hackclub', 'onboard', gerber_files[0])
-
-      generate_pdf(pdf_info, "receipt.pdf")
-
-      print_pdf("receipt.pdf")
-
-      processed_records.setdefault(f'{ONBOARD_BASE_ID}/{ONBOARD_TABLE_NAME}', {})[record_id] = True
-
-      save_processed_records(processed_records)
-
+def main():
+    print("Loaded!")
+    if args.count:
+        print_qty(int(args.count))
+    elif args.before and not args.after:
+        for entry in get_before(entries, args.before):
+            print_entry(entry)
+    elif args.after and not args.before:
+        print('e')
+        for entry in get_after(entries, args.after):
+            print_entry(entry)
+    elif args.before and args.after:
+        for entry in dict(get_before(entries, args.before) & get_after(entries, args.after)):
+            print_entry(entry)
 
 if __name__ == "__main__":
-   while True:
-      print("Polling for new records...")
-      process_new_records()
-      time.sleep(POLL_INTERVAL)
+    main()

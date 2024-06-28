@@ -1,18 +1,50 @@
-# Receipt printer for Hack Club Grants
+# Hack Club YSWS Receipt Printer
 
-This project outputs and prints a receipt on a real receipt printer each time a Sprig or OnBoard grant from Hack Club is issued.
+## About
+This project will automatically print new YSWS (You Ship, We Ship) projects on a standard 80mm receipt printer. It is designed for internal use at Hack Club HQ, but when provided with the proper data and API keys, it can be used anywhere with some modifications.
 
-## Dependencies
+## Prerequisites
+* Python - I used 3.12
+* An Airtable API key with access to a Table having the following fields:
+    * ID, in the format "<ysws_type>–<name_of_submitter>"
+    * Email
+    * "How did you hear about this?"
+    * "What are we doing well?"
+    * "How can we improve?"
+    * Age When Approved
+    * Code URL
+    * Screenshot (can handle multiple)
+    * Description
+    * GitHub Username
+    * Approved At
+    * Created (timestamp)
+* A Receipt Printer
 
-    $ npm install -g @tracespace/cli@next
 
-## To-Do
+## Setup
+1. Clone the repo
+2. Install dependencies with `pip install -r requirements.txt`
+    * You should probably use a virtual environment, but I won't go into detail here.
+3. Create .env file and populate AIRTABLE_API_KEY, BASE, TABLE, and VIEW with your Airtable information
 
-- Get the code up and running on a Raspberry Pi manually
-- Add some sort of remote monitoring / access system to the Raspberry Pi
-- Write an onboarding guide that makes it easy to get the script up and running on a new Raspberry Pi
-- Dream: Separate system into a client-server model, have the receipts generated serverside, then pushed to the clients attached to printers.
+## Usage
+```
+Unified YSWS Printing Bot [-h] [-c COUNT] [-a AFTER] [-b BEFORE] [-n] [-v]
 
-# Setup
+This program automatically checks the Unified YSWS database for new records. It can also print a specified number of records or those dated before,
+after, or between specified dates upon request.
 
-Set up Raspberry Pi using gadget mode
+options:
+  -h, --help            show this help message and exit
+  -c COUNT, --count COUNT
+                        The number of most recent records to print. If provided, this script will print this number of records and then exit.
+  -a AFTER, --after AFTER
+                        The date in format YYYY-MM-DD at which to start printing records in chronological order. Can be combined with -b/--before to
+                        print all records between two dates.
+  -b BEFORE, --before BEFORE
+                        The date in format YYYY-MM-DD at which to start printing records in REVERSE chronological order. Best used with -a/--after.
+  -n, --no_print        Do not print out generated documents. Used for debugging.
+  -v, --verbose         Verbode mode. Used for debugging.
+```
+
+Enjoy!

@@ -1,0 +1,5 @@
+pyairtable==2.3.3
+markdown==3.6
+python-dotenv==1.0.1
+weasyprint==62.3
+qrcode==7.4.2
