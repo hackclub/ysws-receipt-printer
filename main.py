@@ -73,25 +73,24 @@ def html_template(grant_info: Dict[str, str | List[str]]):
     <img src="https://github.com/{grant_info["gh"]}.png" style="width: 35%; height: auto" />
     <p style="margin: 0; font-size: 150%">{grant_info["name"]}</p>
     <p style="margin: 0">{grant_info["location"]}</p>
-    {f"<p style=\"margin: 0\">Age {grant_info["age"]}</p>" if grant_info["age"] != "" else ""}
+    {f'<p style="margin: 0">Age {grant_info["age"]}</p>' if grant_info["age"] != "" else ""}
     <br />
-    {f"<p style=\"text-decoration-line: underline;font-weight: bold; margin: 0\">How did you hear about {grant_info["type"]}?<br/><div style=\"text-decoration-line: none; font-weight: regular\">{grant_info["ref"]}</div></p>" if grant_info["ref"] != "" else ""}
+    {f'<p style="text-decoration-line: underline;font-weight: bold; margin: 0">How did you hear about {grant_info["type"]}?<br/><div style="text-decoration-line: none; font-weight: regular">{grant_info["ref"]}</div></p>' if grant_info["ref"] != "" else ""}
 
-    {f"<p style=\"text-decoration-line: underline;font-weight: bold; margin: 0\">What are we doing well?<br/><div style=\"text-decoration-line: none; font-weight: regular\">{grant_info["good"]}</div></p>" if grant_info["good"] != "" else ""}
+    {f'<p style="text-decoration-line: underline;font-weight: bold; margin: 0">What are we doing well?<br/><div style="text-decoration-line: none; font-weight: regular">{grant_info["good"]}</div></p>' if grant_info["good"] != "" else ""}
 
-    {f"<p style=\"text-decoration-line: underline;font-weight: bold; margin: 0\">How can we improve?<br/><div style=\"text-decoration-line: none; font-weight: regular\">{grant_info["bad"]}</div></p>" if grant_info["bad"] != "" else ""}
+    {f'<p style="text-decoration-line: underline;font-weight: bold; margin: 0">How can we improve?<br/><div style="text-decoration-line: none; font-weight: regular">{grant_info["bad"]}</div></p>' if grant_info["bad"] != "" else ""}
 
-    {f"<p style=\"text-decoration-line: underline;font-weight: bold; margin: 0\">Description<br/><div style=\"text-decoration-line: none; font-weight: regular\">{grant_info["description"]}</div></p>" if grant_info["description"] != "" else ""}
-
-    {"\n".join(grant_info["screenshots"])}
+    {f'<p style="text-decoration-line: underline;font-weight: bold; margin: 0">Description<br/><div style="text-decoration-line: none; font-weight: regular">{grant_info["description"]}</div></p>' if grant_info["description"] != "" else ""}
+""" +  "\n".join(grant_info["screenshots"]) + f"""
     <div style="display: flex; justify-content: space-evenly; width: 100%; margin-top: 0">
         <div>
-            {(f"""<p style="text-decoration-line: underline;font-weight: bold;text-align:center; margin-bottom: 0">Email</p>
-            <img src="{grant_info["email_qr"]}" style="width: 75pt; height: auto"/>""") if grant_info["email_qr"] != "" else ""}
+            {(f'''<p style="text-decoration-line: underline;font-weight: bold;text-align:center; margin-bottom: 0">Email</p>
+            <img src="{grant_info["email_qr"]}" style="width: 75pt; height: auto"/>''') if grant_info["email_qr"] != "" else ""}
         </div>
         <div>
-            {(f"""<p style="text-decoration-line: underline;font-weight: bold;text-align:center; margin-bottom: 0">Code URL</p>
-            <img src="{grant_info["code_qr"]}" style="width: 75pt; height: auto"/>""") if grant_info["code_qr"] != "" else ""}
+            {(f'''<p style="text-decoration-line: underline;font-weight: bold;text-align:center; margin-bottom: 0">Code URL</p>
+            <img src="{grant_info["code_qr"]}" style="width: 75pt; height: auto"/>''') if grant_info["code_qr"] != "" else ""}
         </div>
     </div>
     <h6 style="text-align: center; margin-top: 0">This was printed at {grant_info["time"]}</h6>
@@ -161,7 +160,7 @@ def print_entry(entry):
     if "Screenshot" in entry["fields"]:
         if VERBOSE:print("Has screenshot")
         for screenshot in entry["fields"]["Screenshot"]:
-            screenshots.append(f"<img src=\"{screenshot["url"]}\" style=\"width: 75%; height: auto; display: block; margin-left: auto; margin-right: auto\"/>")
+            screenshots.append(f"<img src=\"{screenshot['url']}\" style=\"width: 75%; height: auto; display: block; margin-left: auto; margin-right: auto\"/>")
     html = HTML(
         string=html_template(
             {
@@ -170,7 +169,7 @@ def print_entry(entry):
                 "name": " ".join(entry["fields"]["ID"].split("–")[1:]),
                 "age": entry["fields"]["Age When Approved"] if "Age When Approved" in entry["fields"] else "",
                 "time": time.strftime("%A %b. %-d, %Y"),
-                "location": f"{entry["fields"]["City"]}, {entry["fields"]["State / Province"]} - {entry["fields"]["Country"]}",
+                "location": f"{entry['fields']['City']}, {entry['fields']['State / Province']} - {entry['fields']['Country']}",
                 "ref": entry["fields"]["How did you hear about this?"] if "How did you hear about this?" in entry["fields"] else "",
                 "good": entry["fields"]["What are we doing well?"] if "What are we doing well?" in entry["fields"] else "",
                 "bad": entry["fields"]["How can we improve?"] if "How can we improve?" in entry["fields"] else "",
