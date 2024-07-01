@@ -186,7 +186,7 @@ def print_qty(qty: int):
     for entry in entries[:qty]:
         print_entry(entry)
 
-def poll():
+def poll(entries):
     while True:
         print("Polling Airtable...")
         updated_entries = check_for_updates(entries)
@@ -200,7 +200,7 @@ def poll():
 def main():
     print("Loaded!")
     if not args.count and not args.after and not args.before:
-      poll()
+      poll(entries)
     if args.count:
         print_qty(int(args.count))
     elif args.before and not args.after:
