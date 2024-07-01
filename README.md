@@ -4,7 +4,7 @@
 This project will automatically print new YSWS (You Ship, We Ship) projects on a standard 80mm receipt printer. It is designed for internal use at Hack Club HQ, but when provided with the proper data and API keys, it can be used anywhere with some modifications.
 
 ## Prerequisites
-* Python 3.12 or newer. This project uses some syntax that is only supported in 3.12 or above. Backporting PRs are welcome!
+* A modern version of Python 3 (Not sure what the cutoff is, but 3.11 works)
 * An Airtable API key with access to a Table having the following fields:
     * ID, in the format "<ysws_type>–<name_of_submitter>"
     * Email
