@@ -27,10 +27,6 @@ parser.add_argument('-n', '--no_print', help="Do not print out generated documen
 parser.add_argument('-v', '--verbose', help="Verbode mode. Used for debugging.", action="store_true")
 args = parser.parse_args()
 
-if not args.count and not args.after and not args.before:
-    print("Please specify at least one of -c/--count, -b/--before, or -a/--after. Exiting now.")
-    exit()
-
 PRINTING = not args.no_print
 VERBOSE = args.verbose
 
@@ -199,10 +195,12 @@ def poll():
         entries = airtable.base(BASE).table(TABLE).all(view=VIEW)
         for entry in updated_entries:
             print_entry(entry)
-        time.sleep(7)
+        time.sleep(30)
 
 def main():
     print("Loaded!")
+    if not args.count and not args.after and not args.before:
+      poll()
     if args.count:
         print_qty(int(args.count))
     elif args.before and not args.after:
