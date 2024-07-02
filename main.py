@@ -131,16 +131,19 @@ if VERBOSE:
 
 
 def get_before(entries, date: str):
+    new_date = time.strptime(date, "%m-%d-%Y")
     before_entries = []
     for entry in entries:
-        if entry["fields"]["Approved At"] == date:
+        if time.strptime(entry["fields"]["Approved At"], "%Y-%m-%d") < new_date:
             before_entries.append(entry)
     return before_entries
 
+
 def get_after(entries, date: str):
+    new_date = time.strptime(date, "%m-%d-%Y")
     after_entries = []
     for entry in entries:
-        if entry["fields"]["Approved At"] == date:
+        if time.strptime(entry["fields"]["Approved At"], "%Y-%m-%d") > new_date:
             after_entries.append(entry)
     return after_entries
 
