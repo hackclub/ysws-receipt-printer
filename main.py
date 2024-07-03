@@ -168,7 +168,7 @@ def print_entry(entry):
                 "name": " ".join(entry["fields"]["ID"].split("–")[1:]),
                 "age": entry["fields"]["Age When Approved"] if "Age When Approved" in entry["fields"] else "",
                 "time": time.strftime("%A %b. %-d, %Y"),
-                "location": f"{entry['fields']['City']}, {entry['fields']['State / Province']} - {entry['fields']['Country']}",
+                "location": f"{entry['fields']['City'] + ', ' if 'City' in entry['fields'] else ''}{entry['fields']['State / Province'] + ' - 'if 'State / Province' in entry['fields'] else ''}{entry['fields']['Country']}",
                 "ref": entry["fields"]["How did you hear about this?"] if "How did you hear about this?" in entry["fields"] else "",
                 "good": entry["fields"]["What are we doing well?"] if "What are we doing well?" in entry["fields"] else "",
                 "bad": entry["fields"]["How can we improve?"] if "How can we improve?" in entry["fields"] else "",
