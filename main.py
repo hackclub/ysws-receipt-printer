@@ -48,8 +48,8 @@ airtable = Api(os.getenv("AIRTABLE_API_KEY"))
 if VERBOSE:
     print("API set up!")
 
-if not path.exists(f"printed{"-dev" if DEV else ""}.json"):
-    json.dump(airtable.base(BASE).table(TABLE).all(view=VIEW), open(f"printed{"-dev" if DEV else ""}.json", "w"))
+if not path.exists(f"printed{'-dev' if DEV else ''}.json"):
+    json.dump(airtable.base(BASE).table(TABLE).all(view=VIEW), open(f"printed{'-dev' if DEV else ''}.json", "w"))
 
 def check_for_updates(entries):
     updated_entries = airtable.base(BASE).table(TABLE).all(view=VIEW)
@@ -58,7 +58,7 @@ def check_for_updates(entries):
         for entry in updated_entries:
             if entry not in entries:
                 new_entries.append(entry)
-    json.dump(updated_entries, open(f"printed{"-dev" if DEV else ""}.json", "w"))
+    json.dump(updated_entries, open(f"printed{'dev' if DEV else ''}.json", "w"))
     return new_entries
 
 
@@ -131,7 +131,7 @@ if VERBOSE:
     print("CSS renderer initalized!")
     print("Fetching all entries...")
 
-entries = json.load(open(f"printed{"-dev" if DEV else ""}.json", "r"))
+entries = json.load(open(f"printed{'-dev' if DEV else ''}.json", "r"))
 
 if VERBOSE:
     print("All entries fetched!")
