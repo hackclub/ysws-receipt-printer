@@ -1,34 +1,37 @@
 # Hack Club YSWS Receipt Printer
 
 ## About
+
 This project will automatically print new YSWS (You Ship, We Ship) projects on a standard 80mm receipt printer. It is designed for internal use at Hack Club HQ, but when provided with the proper data and API keys, it can be used anywhere with some modifications.
 
 ## Prerequisites
-* A modern version of Python 3 (Not sure what the cutoff is, but 3.11 works)
-* An Airtable API key with access to a Table having the following fields:
-    * ID, in the format "<ysws_type>–<name_of_submitter>"
-    * Email
-    * "How did you hear about this?"
-    * "What are we doing well?"
-    * "How can we improve?"
-    * Age When Approved
-    * Code URL
-    * Screenshot (can handle multiple)
-    * Description
-    * GitHub Username
-    * Approved At
-    * Created (timestamp)
-* A Receipt Printer
 
+- A modern version of Python 3 (Not sure what the cutoff is, but 3.11 works)
+- An Airtable API key with access to a Table having the following fields:
+  - ID, in the format "<ysws_type>–<name_of_submitter>"
+  - Email
+  - "How did you hear about this?"
+  - "What are we doing well?"
+  - "How can we improve?"
+  - Age When Approved
+  - Code URL
+  - Screenshot (can handle multiple)
+  - Description
+  - GitHub Username
+  - Approved At
+  - Created (timestamp)
+- A Receipt Printer
 
 ## Setup
+
 1. Clone the repo
 2. Install dependencies with `pip install -r requirements.txt`
-    * You should probably use a virtual environment, but I won't go into detail here.
+   - You should probably use a virtual environment, but I won't go into detail here.
 3. Create .env file and populate AIRTABLE_API_KEY, BASE, TABLE, and VIEW with your Airtable information
 
 ## Usage
-```
+
+```text
 Unified YSWS Printing Bot [-h] [-c COUNT] [-a AFTER] [-b BEFORE] [-n] [-v]
 
 This program automatically checks the Unified YSWS database for new records. It can also print a specified number of records or those dated before,
