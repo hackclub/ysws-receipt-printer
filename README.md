@@ -27,7 +27,7 @@ This project will automatically print new YSWS (You Ship, We Ship) projects on a
 1. Clone the repo
 2. Install dependencies with `pip install -r requirements.txt`
    - You should probably use a virtual environment, but I won't go into detail here.
-3. Create .env file and populate AIRTABLE_API_KEY, BASE, TABLE, and VIEW with your Airtable information
+3. Create .env file and populate AIRTABLE_API_KEY, PROD_BASE, PROD_TABLE, and PROD_VIEW with your Airtable information
 
 ## Usage
 

@@ -163,3 +163,4 @@ cython_debug/
 
 
 out.pdf
+printed*.json

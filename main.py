@@ -4,6 +4,7 @@ import argparse
 import base64
 import datetime
 import io
+import json
 import time
 from pyairtable import Api
 import markdown
@@ -12,7 +13,7 @@ import os
 from typing import Dict, List
 from weasyprint import HTML, CSS
 from weasyprint.text.fonts import FontConfiguration
-from os import system
+from os import system, path
 import qrcode
 
 
@@ -25,10 +26,12 @@ parser.add_argument('-a', '--after', help="The date in format YYYY-MM-DD at whic
 parser.add_argument('-b', '--before', help="The date in format YYYY-MM-DD at which to start printing records in REVERSE chronological order. Best used with -a/--after.")
 parser.add_argument('-n', '--no_print', help="Do not print out generated documents. Used for debugging.", action="store_true")
 parser.add_argument('-v', '--verbose', help="Verbode mode. Used for debugging.", action="store_true")
+parser.add_argument('-d', '--dev', help="Developer mode. Tells Airtable to use the development environment variables, DEV_BASE, DEV_TABLE, and DEV_VIEW.", action="store_true")
 args = parser.parse_args()
 
 PRINTING = not args.no_print
 VERBOSE = args.verbose
+DEV = args.dev
 
 if VERBOSE:
     print("Modules imported!")
@@ -36,14 +39,17 @@ if VERBOSE:
 
 load_dotenv()
 
-BASE = os.getenv("BASE")
-TABLE = os.getenv("TABLE")
-VIEW = os.getenv("VIEW")
+BASE = os.getenv("DEV_BASE" if DEV else "PROD_BASE")
+TABLE = os.getenv("DEV_TABLE" if DEV else "PROD_TABLE")
+VIEW = os.getenv("DEV_VIEW" if DEV else "PROD_VIEW")
 
 airtable = Api(os.getenv("AIRTABLE_API_KEY"))
 
 if VERBOSE:
     print("API set up!")
+
+if not path.exists(f"printed{"-dev" if DEV else ""}.json"):
+    json.dump(airtable.base(BASE).table(TABLE).all(view=VIEW), open(f"printed{"-dev" if DEV else ""}.json", "w"))
 
 def check_for_updates(entries):
     updated_entries = airtable.base(BASE).table(TABLE).all(view=VIEW)
@@ -52,6 +58,7 @@ def check_for_updates(entries):
         for entry in updated_entries:
             if entry not in entries:
                 new_entries.append(entry)
+    json.dump(updated_entries, open(f"printed{"-dev" if DEV else ""}.json", "w"))
     return new_entries
 
 
@@ -124,7 +131,7 @@ if VERBOSE:
     print("CSS renderer initalized!")
     print("Fetching all entries...")
 
-entries = airtable.base(BASE).table(TABLE).all(view=VIEW)
+entries = json.load(open(f"printed{"-dev" if DEV else ""}.json", "r"))
 
 if VERBOSE:
     print("All entries fetched!")
@@ -210,7 +217,6 @@ def main():
         for entry in get_before(entries, args.before):
             print_entry(entry)
     elif args.after and not args.before:
-        print('e')
         for entry in get_after(entries, args.after):
             print_entry(entry)
     elif args.before and args.after:
