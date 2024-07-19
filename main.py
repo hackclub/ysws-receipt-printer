@@ -70,7 +70,7 @@ def html_template(grant_info: Dict[str, str | List[str]]):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
-    <p style="text-align: center; font-size: 65px; font-weight: bold; margin: 0">{grant_info["type"]}</p>
+    <p style="text-align: center; font-size: 65px; font-weight: bold; margin: 0; max-width: 90vw" >{grant_info["type"]}</p>
     <p style="margin: 0">{grant_info["created"]}</p>
     <br/>
     <img src="https://github.com/{grant_info["gh"]}.png" style="width: 35%; height: auto" />
