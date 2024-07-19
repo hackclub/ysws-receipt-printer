@@ -31,7 +31,7 @@ args = parser.parse_args()
 
 PRINTING = not args.no_print
 VERBOSE = args.verbose
-DEV = args.dev
+DEV = True if args.dev is True else False
 
 if VERBOSE:
     print("Modules imported!")
@@ -70,7 +70,7 @@ def html_template(grant_info: Dict[str, str | List[str]]):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
-    <p style="text-align: center; font-size: 65px; font-weight: bold; margin: 0; max-width: 90vw" >{grant_info["type"]}</p>
+    <p style="text-align: center; font-size: {30 / len(grant_info["type"])}rem; margin: 0; font-weight: bold; width: 100vw">{grant_info["type"]}</p>
     <p style="margin: 0">{grant_info["created"]}</p>
     <br/>
     <img src="https://github.com/{grant_info["gh"]}.png" style="width: 35%; height: auto" />
