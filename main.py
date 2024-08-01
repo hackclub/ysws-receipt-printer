@@ -7,7 +7,6 @@ import io
 import json
 import time
 from pyairtable import Api
-import markdown
 from dotenv import load_dotenv
 import os
 from typing import Dict, List
@@ -18,15 +17,40 @@ import qrcode
 
 
 parser = argparse.ArgumentParser(
-                    prog='Unified YSWS Printing Bot',
-                    description='This program automatically checks the Unified YSWS database for new records. It can also print a specified number of records or those dated before, after, or between specified dates upon request.',
-                    epilog='Made with love by Micha Albert.')
-parser.add_argument('-c', '--count', help="The number of most recent records to print. If provided, this script will print this number of records and then exit.")
-parser.add_argument('-a', '--after', help="The date in format YYYY-MM-DD at which to start printing records in chronological order. Can be combined with -b/--before to print all records between two dates.")
-parser.add_argument('-b', '--before', help="The date in format YYYY-MM-DD at which to start printing records in REVERSE chronological order. Best used with -a/--after.")
-parser.add_argument('-n', '--no_print', help="Do not print out generated documents. Used for debugging.", action="store_true")
-parser.add_argument('-v', '--verbose', help="Verbode mode. Used for debugging.", action="store_true")
-parser.add_argument('-d', '--dev', help="Developer mode. Tells Airtable to use the development environment variables, DEV_BASE, DEV_TABLE, and DEV_VIEW.", action="store_true")
+    prog="Unified YSWS Printing Bot",
+    description="This program automatically checks the Unified YSWS database for new records. It can also print a specified number of records or those dated before, after, or between specified dates upon request.",
+    epilog="Made with love by Micha Albert.",
+)
+parser.add_argument(
+    "-c",
+    "--count",
+    help="The number of most recent records to print. If provided, this script will print this number of records and then exit.",
+)
+parser.add_argument(
+    "-a",
+    "--after",
+    help="The date in format YYYY-MM-DD at which to start printing records in chronological order. Can be combined with -b/--before to print all records between two dates.",
+)
+parser.add_argument(
+    "-b",
+    "--before",
+    help="The date in format YYYY-MM-DD at which to start printing records in REVERSE chronological order. Best used with -a/--after.",
+)
+parser.add_argument(
+    "-n",
+    "--no_print",
+    help="Do not print out generated documents. Used for debugging.",
+    action="store_true",
+)
+parser.add_argument(
+    "-v", "--verbose", help="Verbode mode. Used for debugging.", action="store_true"
+)
+parser.add_argument(
+    "-d",
+    "--dev",
+    help="Developer mode. Tells Airtable to use the development environment variables, DEV_BASE, DEV_TABLE, and DEV_VIEW.",
+    action="store_true",
+)
 args = parser.parse_args()
 
 PRINTING = not args.no_print
@@ -49,21 +73,31 @@ if VERBOSE:
     print("API set up!")
 
 if not path.exists(f"printed{'-dev' if DEV else ''}.json"):
-    json.dump(airtable.base(BASE).table(TABLE).all(view=VIEW), open(f"printed{'-dev' if DEV else ''}.json", "w"))
+    json.dump(
+        [rec["id"] for rec in airtable.base(BASE).table(TABLE).all(view=VIEW)],
+        open(f"printed{'-dev' if DEV else ''}.json", "w"),
+    )
+
 
 def check_for_updates(entries):
-    updated_entries = airtable.base(BASE).table(TABLE).all(view=VIEW)
+    updated_entries = [
+        rec["id"] for rec in airtable.base(BASE).table(TABLE).all(view=VIEW)
+    ]
     new_entries = []
     if updated_entries != entries:
         for entry in updated_entries:
             if entry not in entries:
                 new_entries.append(entry)
-    json.dump(updated_entries, open(f"printed{'dev' if DEV else ''}.json", "w"))
+    json.dump(
+        [rec["id"] for rec in airtable.base(BASE).table(TABLE).all(view=VIEW)],
+        open(f"printed{'-dev' if DEV else ''}.json", "w"),
+    )
     return new_entries
 
 
 def html_template(grant_info: Dict[str, str | List[str]]):
-    return f"""<!DOCTYPE html>
+    return (
+        f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -85,7 +119,9 @@ def html_template(grant_info: Dict[str, str | List[str]]):
     {f'<p style="text-decoration-line: underline;font-weight: bold; margin: 0">How can we improve?<br/><div style="text-decoration-line: none; font-weight: regular">{grant_info["bad"]}</div></p>' if grant_info["bad"] != "" else ""}
 
     {f'<p style="text-decoration-line: underline;font-weight: bold; margin: 0">Description<br/><div style="text-decoration-line: none; font-weight: regular">{grant_info["description"]}</div></p>' if grant_info["description"] != "" else ""}
-""" +  "\n".join(grant_info["screenshots"]) + f"""
+"""
+        + "\n".join(grant_info["screenshots"])
+        + f"""
     <div style="display: flex; justify-content: space-evenly; width: 100%; margin-top: 0">
         <div>
             {(f'''<p style="text-decoration-line: underline;font-weight: bold;text-align:center; margin-bottom: 0">Email</p>
@@ -99,11 +135,14 @@ def html_template(grant_info: Dict[str, str | List[str]]):
     <h6 style="text-align: center; margin-top: 0">This was printed at {grant_info["time"]}</h6>
 </body>
 </html>"""
+    )
+
 
 if VERBOSE:
     print("Initalizing CSS renderer...")
 
 font_config = FontConfiguration()
+
 
 def pillow_image_to_base64_string(img):
     buffered = io.BytesIO()
@@ -131,7 +170,7 @@ if VERBOSE:
     print("CSS renderer initalized!")
     print("Fetching all entries...")
 
-entries = json.load(open(f"printed{'-dev' if DEV else ''}.json", "r"))
+entry_ids = json.load(open(f"printed{'-dev' if DEV else ''}.json", "r"))
 
 if VERBOSE:
     print("All entries fetched!")
@@ -140,8 +179,14 @@ if VERBOSE:
 def get_before(entries, date: str):
     new_date = time.strptime(date, "%m-%d-%Y")
     before_entries = []
-    for entry in entries:
-        if time.strptime(entry["fields"]["Approved At"], "%Y-%m-%d") < new_date:
+    for entry in entry_ids:
+        if (
+            time.strptime(
+                airtable.base(BASE).table(TABLE).get(entry)["fields"]["Approved At"],
+                "%Y-%m-%d",
+            )
+            < new_date
+        ):
             before_entries.append(entry)
     return before_entries
 
@@ -150,41 +195,75 @@ def get_after(entries, date: str):
     new_date = time.strptime(date, "%m-%d-%Y")
     after_entries = []
     for entry in entries:
-        if time.strptime(entry["fields"]["Approved At"], "%Y-%m-%d") > new_date:
+        if (
+            time.strptime(
+                entry["fields"]["Approved At"],
+                "%Y-%m-%d",
+            )
+            > new_date
+        ):
             after_entries.append(entry)
     return after_entries
 
 
-
-
 def print_entry(entry):
-    description = ""  
-    if "Description" in entry["fields"]:
-        if VERBOSE:print("Has description")
-        description = entry["fields"]["Description"]
+    description = ""
+    rec = airtable.base(BASE).table(TABLE).get(entry)["fields"]
+    if "Description" in rec:
+        if VERBOSE:
+            print("Has description")
+        description = rec["Description"]
     screenshots = []
-    if "Screenshot" in entry["fields"]:
-        if VERBOSE:print("Has screenshot")
-        for screenshot in entry["fields"]["Screenshot"]:
-            screenshots.append(f"<img src=\"{screenshot['url']}\" style=\"width: 75%; height: auto; display: block; margin-left: auto; margin-right: auto\"/>")
+    if "Screenshot" in rec:
+        if VERBOSE:
+            print("Has screenshot")
+        for screenshot in rec["Screenshot"]:
+            screenshots.append(
+                f"<img src=\"{screenshot['url']}\" style=\"width: 75%; height: auto; display: block; margin-left: auto; margin-right: auto\"/>"
+            )
     html = HTML(
         string=html_template(
             {
-                "type": entry["fields"]["ID"].split("–")[0],
-                "gh": entry["fields"]["GitHub Username"] if "GitHub Username" in entry["fields"] else "",
-                "name": " ".join(entry["fields"]["ID"].split("–")[1:]),
-                "age": entry["fields"]["Age When Approved"] if "Age When Approved" in entry["fields"] else "",
+                "type": rec["ID"].split("–")[0],
+                "gh": (rec["GitHub Username"] if "GitHub Username" in rec else ""),
+                "name": " ".join(rec["ID"].split("–")[1:]),
+                "age": (rec["Age When Approved"] if "Age When Approved" in rec else ""),
                 "time": time.strftime("%A %b. %-d, %Y"),
-                "location": f"{entry['fields']['City'] + ', ' if 'City' in entry['fields'] else ''}{entry['fields']['State / Province'] + ' - 'if 'State / Province' in entry['fields'] else ''}{entry['fields']['Country']}",
-                "ref": entry["fields"]["How did you hear about this?"] if "How did you hear about this?" in entry["fields"] else "",
-                "good": entry["fields"]["What are we doing well?"] if "What are we doing well?" in entry["fields"] else "",
-                "bad": entry["fields"]["How can we improve?"] if "How can we improve?" in entry["fields"] else "",
+                "location": f"{rec['City'] + ', ' if 'City' in rec else ''}{rec['State / Province'] if 'State / Province' in rec else ''}{' - '+ rec['Country'] if 'Country' in rec else ''}",
+                "ref": (
+                    rec["How did you hear about this?"]
+                    if "How did you hear about this?" in rec
+                    else ""
+                ),
+                "good": (
+                    rec["What are we doing well?"]
+                    if "What are we doing well?" in rec
+                    else ""
+                ),
+                "bad": (
+                    rec["How can we improve?"] if "How can we improve?" in rec else ""
+                ),
                 "description": description,
                 "screenshots": screenshots,
-                "email_qr": ('data:image/jpeg;base64,' + pillow_image_to_base64_string(qrcode.make(entry["fields"]["Email"]))) if "Email" in entry["fields"] else "",
-                "code_qr": ('data:image/jpeg;base64,' + pillow_image_to_base64_string(qrcode.make(entry["fields"]["Code URL"]))) if "Code URL" in entry["fields"] else "",
-                "created": datetime.datetime.fromisoformat(str(entry["fields"]["Created"])).strftime("%m/%d/%Y – %I:%M%p")
-
+                "email_qr": (
+                    (
+                        "data:image/jpeg;base64,"
+                        + pillow_image_to_base64_string(qrcode.make(rec["Email"]))
+                    )
+                    if "Email" in rec
+                    else ""
+                ),
+                "code_qr": (
+                    (
+                        "data:image/jpeg;base64,"
+                        + pillow_image_to_base64_string(qrcode.make(rec["Code URL"]))
+                    )
+                    if "Code URL" in rec
+                    else ""
+                ),
+                "created": datetime.datetime.fromisoformat(
+                    str(rec["Created"])
+                ).strftime("%m/%d/%Y – %I:%M%p"),
             }
         )
     )
@@ -192,9 +271,13 @@ def print_entry(entry):
     if PRINTING:
         system("lp out.pdf")
 
+
 def print_qty(qty: int):
-    for entry in entries[:qty]:
+    for entry in [rec["id"] for rec in airtable.base(BASE).table(TABLE).all(view=VIEW)][
+        :qty
+    ]:
         print_entry(entry)
+
 
 def poll(entries):
     while True:
@@ -202,26 +285,44 @@ def poll(entries):
         updated_entries = check_for_updates(entries)
         if len(updated_entries) > 0:
             print("Found at least one new entry!")
-        entries = airtable.base(BASE).table(TABLE).all(view=VIEW)
+        entries = [rec["id"] for rec in airtable.base(BASE).table(TABLE).all(view=VIEW)]
         for entry in updated_entries:
             print_entry(entry)
         time.sleep(30)
+        entries = json.load(open(f"printed{'-dev' if DEV else ''}.json", "r"))
+
 
 def main():
     print("Loaded!")
     if not args.count and not args.after and not args.before:
-      poll(entries)
+        poll([rec["id"] for rec in airtable.base(BASE).table(TABLE).all(view=VIEW)])
     if args.count:
         print_qty(int(args.count))
     elif args.before and not args.after:
-        for entry in get_before(entries, args.before):
+        for entry in get_before(
+            [rec["id"] for rec in airtable.base(BASE).table(TABLE).all(view=VIEW)],
+            args.before,
+        ):
             print_entry(entry)
     elif args.after and not args.before:
-        for entry in get_after(entries, args.after):
-            print_entry(entry)
+        for entry in get_after(
+            airtable.base(BASE).table(TABLE).all(view=VIEW),
+            args.after,
+        ):
+            print_entry(entry["id"])
     elif args.before and args.after:
-        for entry in dict(get_before(entries, args.before) & get_after(entries, args.after)):
+        for entry in dict(
+            get_before(
+                [rec["id"] for rec in airtable.base(BASE).table(TABLE).all(view=VIEW)],
+                args.before,
+            )
+            & get_after(
+                [rec["id"] for rec in airtable.base(BASE).table(TABLE).all(view=VIEW)],
+                args.after,
+            )
+        ):
             print_entry(entry)
+
 
 if __name__ == "__main__":
     main()
